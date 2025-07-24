@@ -1,0 +1,7 @@
+mss
+pytesseract
+Pillow
+requests
+libretranslate
+keyboard
+pyobjc
