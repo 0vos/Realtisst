@@ -8,41 +8,6 @@ from Cocoa import NSEvent
 OCR_LANG = 'eng'
 overlay_windows = []
 last_texts = []
-def global_key_listener(manager):
-    def tap_callback(proxy, type_, event, refcon):
-        if type_ != Quartz.kCGEventKeyDown:
-            return event
-
-        keycode = Quartz.CGEventGetIntegerValueField(event, Quartz.kCGKeyboardEventKeycode)
-        flags = Quartz.CGEventGetFlags(event)
-
-        # 检测是否按住 command 和 control
-        command_pressed = (flags & Quartz.kCGEventFlagMaskCommand) != 0
-        control_pressed = (flags & Quartz.kCGEventFlagMaskControl) != 0
-
-        # keycode 16 是 y，4 是 h
-        if command_pressed and control_pressed and (keycode == 16 or keycode == 4):
-            # 这里触发你想要的动作
-            manager.trigger_action(keycode)
-            return None  # 阻止事件传递
-
-        return event
-
-    event_mask = (1 << Quartz.kCGEventKeyDown)
-    tap = Quartz.CGEventTapCreate(
-        Quartz.kCGSessionEventTap,
-        Quartz.kCGHeadInsertEventTap,
-        Quartz.kCGEventTapOptionDefault,
-        event_mask,
-        tap_callback,
-        None
-    )
-
-    run_loop_source = Quartz.CFMachPortCreateRunLoopSource(None, tap, 0)
-    loop = Quartz.CFRunLoopGetCurrent()
-    Quartz.CFRunLoopAddSource(loop, run_loop_source, Quartz.kCFRunLoopDefaultMode)
-    Quartz.CGEventTapEnable(tap, True)
-    Quartz.CFRunLoopRun()
 
 def translate_batch(text_list):
     if not text_list:
