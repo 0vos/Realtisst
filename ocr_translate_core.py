@@ -66,9 +66,15 @@ def get_text_blocks(img, screen_width=None, screen_height=None):
             continue
 
         last_word = current_para[-1]
-        vertical_gap = abs(word['top'] - last_word['bottom'])
 
-        if vertical_gap > threshold:
+        vertical_gap = abs(word['top'] - last_word['bottom'])
+        horizontal_gap = abs(word['left'] - last_word['right'])
+
+        # 可以调整这两个阈值试试，经验值如下
+        max_vertical_gap = 40
+        max_horizontal_gap = 1024
+
+        if vertical_gap > max_vertical_gap or horizontal_gap > max_horizontal_gap:
             paragraphs.append(current_para)
             current_para = [word]
         else:
