@@ -12,11 +12,11 @@ from AppKit import (
 from Foundation import NSObject, NSAutoreleasePool, NSArray, NSLock
 from ocr_translate_core import get_text_blocks, translate_batch
 
-import Quartz
-import AppKit
-from Cocoa import NSEvent
+# import Quartz
+# import AppKit
+# from Cocoa import NSEvent
 
-
+is_lock = True
 
 class OverlayManager(NSObject):
     def init(self):
@@ -191,8 +191,15 @@ OverlayManager.showTranslatedBlocks_translations_ = selector(
 
 # sct = mss()  # 用于全屏截图
 def background_loop(manager):
+    global is_lock
     while True:
+        if is_lock:
+            manager.hide_all_windows()
+            time.sleep(0.2)
+            continue
+
         if not manager.continuous_mode and not manager.toggle_display:
+            # manager.hide_all_windows()
             time.sleep(0.2)
             continue
 
@@ -210,7 +217,7 @@ def background_loop(manager):
         blocks = get_text_blocks(pil_img, screen_width=screen_width, screen_height=screen_height)
         texts = [b['text'] for b in blocks]
         if not texts:
-            time.sleep(1)
+            time.sleep(0.5)
             continue
 
         translations = translate_batch(texts)
@@ -224,7 +231,7 @@ def background_loop(manager):
         if not manager.continuous_mode:
             manager.toggle_display = False
 
-        time.sleep(1.0)
+        time.sleep(3)
 
 def capture_fullscreen():
     from Quartz import (
@@ -273,6 +280,7 @@ def global_key_listener(manager):
 
     # 定义回调
     def tap_callback(proxy, type_, event, refcon):
+        global is_lock
         # 10 = kCGEventKeyDown
         if type_ == Quartz.kCGEventKeyDown:
             keycode = Quartz.CGEventGetIntegerValueField(event, Quartz.kCGKeyboardEventKeycode)
@@ -281,10 +289,22 @@ def global_key_listener(manager):
             command_mask = Quartz.kCGEventFlagMaskCommand
             control_mask = Quartz.kCGEventFlagMaskControl
             if (flags & command_mask) and (flags & control_mask):
-                if keycode == 16:  # y
+                if keycode == 16 and is_lock:  # y
                     manager.toggle_display = not manager.toggle_display
-                elif keycode == 4:  # h
+                    is_lock = False
+                    print("切换一次翻译显示，当前状态：", manager.toggle_display)
+                elif keycode == 16 and not is_lock:  # y
+                    # manager.toggle_display = not manager.toggle_display
+                    is_lock = True
+                    print("切换一次翻译显示，当前状态：", manager.toggle_display)
+                elif keycode == 4 and is_lock:  # h
                     manager.continuous_mode = not manager.continuous_mode
+                    is_lock = False
+                    print("切换持续翻译模式，当前状态：", manager.continuous_mode)
+                elif keycode == 4 and not is_lock:  # h
+                    # manager.continuous_mode = not manager.continuous_mode
+                    is_lock = True
+                    print("切换持续翻译模式，当前状态：", manager.continuous_mode)
         return event
 
     # 设置事件掩码为键盘事件
