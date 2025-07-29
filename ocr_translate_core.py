@@ -1,8 +1,5 @@
 import pytesseract
 import requests
-import Quartz
-import AppKit
-from Cocoa import NSEvent
 
 # 设置语言（只保留你需要识别的语言）
 OCR_LANG = 'eng'
@@ -30,21 +27,6 @@ def translate_batch(text_list):
             result = "[翻译失败]"
         results.append(result)
     return results
-
-# 本地翻译 API 示例（替换为你自己的）
-# def translate_ocr(text):
-#     url = "http://127.0.0.1:5000/translate"
-#     payload = {
-#         "q": text,
-#         "source": "auto",
-#         "target": "zh",
-#         "format": "text"
-#     }
-#     response = requests.post(url, data=payload)
-#     print("TRANSLATION: ", response.json()["translatedText"])
-#     return response.json()["translatedText"]
-#
-# print(translate_ocr("Press any key to continue"))
 
 # 获取 OCR 文本 + 位置信息
 
@@ -137,4 +119,19 @@ def get_text_blocks(img, screen_width=None, screen_height=None):
         del b['original_top']
 
     return results
+
+# 本地翻译 API 示例（替换为你自己的）
+# def translate_ocr(text):
+#     url = "http://127.0.0.1:5000/translate"
+#     payload = {
+#         "q": text,
+#         "source": "auto",
+#         "target": "zh",
+#         "format": "text"
+#     }
+#     response = requests.post(url, data=payload)
+#     print("TRANSLATION: ", response.json()["translatedText"])
+#     return response.json()["translatedText"]
+#
+# print(translate_ocr("Press any key to continue"))
 
