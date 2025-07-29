@@ -1,10 +1,48 @@
 import pytesseract
 import requests
+import Quartz
+import AppKit
+from Cocoa import NSEvent
 
 # 设置语言（只保留你需要识别的语言）
 OCR_LANG = 'eng'
 overlay_windows = []
 last_texts = []
+def global_key_listener(manager):
+    def tap_callback(proxy, type_, event, refcon):
+        if type_ != Quartz.kCGEventKeyDown:
+            return event
+
+        keycode = Quartz.CGEventGetIntegerValueField(event, Quartz.kCGKeyboardEventKeycode)
+        flags = Quartz.CGEventGetFlags(event)
+
+        # 检测是否按住 command 和 control
+        command_pressed = (flags & Quartz.kCGEventFlagMaskCommand) != 0
+        control_pressed = (flags & Quartz.kCGEventFlagMaskControl) != 0
+
+        # keycode 16 是 y，4 是 h
+        if command_pressed and control_pressed and (keycode == 16 or keycode == 4):
+            # 这里触发你想要的动作
+            manager.trigger_action(keycode)
+            return None  # 阻止事件传递
+
+        return event
+
+    event_mask = (1 << Quartz.kCGEventKeyDown)
+    tap = Quartz.CGEventTapCreate(
+        Quartz.kCGSessionEventTap,
+        Quartz.kCGHeadInsertEventTap,
+        Quartz.kCGEventTapOptionDefault,
+        event_mask,
+        tap_callback,
+        None
+    )
+
+    run_loop_source = Quartz.CFMachPortCreateRunLoopSource(None, tap, 0)
+    loop = Quartz.CFRunLoopGetCurrent()
+    Quartz.CFRunLoopAddSource(loop, run_loop_source, Quartz.kCFRunLoopDefaultMode)
+    Quartz.CGEventTapEnable(tap, True)
+    Quartz.CFRunLoopRun()
 
 def translate_batch(text_list):
     if not text_list:
@@ -135,114 +173,3 @@ def get_text_blocks(img, screen_width=None, screen_height=None):
 
     return results
 
-# # 创建悬浮窗显示翻译
-# def show_translation_window(root, x, y, text):
-#     win = tk.Toplevel(root)
-#     win.overrideredirect(True)
-#     win.attributes("-topmost", True)
-#     win.attributes("-alpha", 0.85)
-#     win.configure(bg="black")
-#     label = tk.Label(win, text=text, fg="white", bg="black", font=("Microsoft YaHei", 12))
-#     label.pack()
-#     win.geometry(f"+{x}+{y}")
-#     win.lift()
-#     return win
-#
-# cap = cv2.VideoCapture(2)
-#
-# # 主检测循环
-# def monitor_loop(root):
-#     global cap
-#     overlay_windows = []
-#
-#     while True:
-#         time.sleep(1)
-#         ret, frame = cap.read()
-#         if not ret:
-#             print("摄像头读取失败")
-#             time.sleep(1)
-#             continue
-#         cv2.imwrite("debug_frame.png", frame)
-#
-#         # 转换为 PIL 图像
-#         frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-#         pil_img = Image.fromarray(frame_rgb)
-#         image_width, image_height = pil_img.size
-#
-#         blocks = get_text_blocks(pil_img)
-#         texts = [b['text'] for b in blocks]
-#
-#         global last_texts
-#         if texts == last_texts:
-#             continue
-#         last_texts = texts.copy()  # 保存本轮内容
-#
-#         translations = translate_batch(texts)
-#         print(translations)
-#
-#         root.after(0, update_translations, root, blocks, translations, image_width, image_height)
-#
-#         time.sleep(1.0)
-#
-#
-# def update_translations(root, blocks, translations, image_width, image_height):
-#     global overlay_windows
-#
-#     # 获取主屏幕尺寸
-#     screen = NSScreen.mainScreen()
-#     screen_width = int(screen.frame().size.width)
-#     screen_height = int(screen.frame().size.height)
-#
-#
-#     scale_x = screen_width / image_width
-#     scale_y = screen_height / image_height
-#
-#     def is_overlapping(x1, y1, w1, h1, zones):
-#         for x2, y2, w2, h2 in zones:
-#             if (x1 < x2 + w2 and x1 + w1 > x2 and
-#                     y1 < y2 + h2 and y1 + h1 > y2):
-#                 return True
-#         return False
-#
-#     # 清除旧窗口
-#     for win in overlay_windows:
-#         win.destroy()
-#     overlay_windows.clear()
-#
-#     occupied_zones = []
-#
-#     for block, translation in zip(blocks, translations):
-#         x = int(block['left'] * scale_x)
-#         y = int(block['top'] * scale_y)
-#         w = int(block['width'] * scale_x)
-#         h = int(block['height'] * scale_y)
-#
-#         # 避开原文上方，且不出屏幕
-#         y = max(y - 40, 0)
-#
-#         # 避免重叠
-#         while is_overlapping(x, y, w, h, occupied_zones):
-#             y += 50
-#             if y > screen_height - h:
-#                 break
-#
-#         # 限制不超出屏幕边界
-#         x = min(x, screen_width - w - 10)
-#         y = min(y, screen_height - h - 10)
-#
-#         clean_translation = translation.strip().replace("\n\n", "\n")
-#         win = show_translation_window(root, x, y, clean_translation)
-#         overlay_windows.append(win)
-#         occupied_zones.append((x, y, w, h))
-#
-# # 启动主窗口
-# def main():
-#     root = tk.Tk()
-#     root.withdraw()  # 隐藏主窗口
-#     t = threading.Thread(target=monitor_loop, args=(root,), daemon=True)
-#     t.start()
-#     root.mainloop()
-#     cap.release()
-#
-# if __name__ == "__main__":
-#     main()
