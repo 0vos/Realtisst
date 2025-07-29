@@ -1,7 +1,3 @@
-# No changes to macV2.py requested; only changes to ocr_translate_core.py as per the message.
-# Since only macV2.py content was provided and no content of ocr_translate_core.py was given, no rewriting of macV2.py is needed.
-# Therefore, output the original macV2.py unchanged.
-
 import sys
 import objc
 import time
@@ -15,6 +11,10 @@ from AppKit import (
 )
 from Foundation import NSObject, NSAutoreleasePool, NSArray, NSLock
 from ocr_translate_core import get_text_blocks, translate_batch
+
+import Quartz
+import AppKit
+from Cocoa import NSEvent
 
 
 
@@ -192,14 +192,17 @@ OverlayManager.showTranslatedBlocks_translations_ = selector(
 # sct = mss()  # 用于全屏截图
 def background_loop(manager):
     while True:
-        manager.hide_all_windows()  # 截图前隐藏翻译
-        time.sleep(0.1)  # 等待窗口隐藏生效
+        if not manager.continuous_mode and not manager.toggle_display:
+            time.sleep(0.2)
+            continue
+
+        manager.hide_all_windows()
+        time.sleep(0.1)
 
         pil_img = capture_fullscreen()
+        if pil_img is None:
+            continue
 
-        manager.show_all_windows()  # 截图后恢复显示
-
-        # 继续后面 OCR 和翻译流程
         image_width, image_height = pil_img.size
         screen = NSScreen.mainScreen()
         screen_width = int(screen.frame().size.width)
@@ -216,7 +219,12 @@ def background_loop(manager):
             [blocks, translations, image_width, image_height],
             True
         )
-        time.sleep(1.5)
+
+        # 如果是单次翻译模式，显示一次后重置 toggle
+        if not manager.continuous_mode:
+            manager.toggle_display = False
+
+        time.sleep(1.0)
 
 def capture_fullscreen():
     from Quartz import (
@@ -255,6 +263,49 @@ def capture_fullscreen():
     pil_img.save("debug_frame.png")
     return pil_img
 
+def global_key_listener(manager):
+    """
+    使用 Quartz 创建 CGEventTap 监听全局键盘事件。
+    现在需要同时按下 command + control，再按 y 或 h 才触发行为。
+    """
+    import Quartz
+    import ctypes
+
+    # 定义回调
+    def tap_callback(proxy, type_, event, refcon):
+        # 10 = kCGEventKeyDown
+        if type_ == Quartz.kCGEventKeyDown:
+            keycode = Quartz.CGEventGetIntegerValueField(event, Quartz.kCGKeyboardEventKeycode)
+            flags = Quartz.CGEventGetFlags(event)
+            # 检查是否同时按下 command 和 control
+            command_mask = Quartz.kCGEventFlagMaskCommand
+            control_mask = Quartz.kCGEventFlagMaskControl
+            if (flags & command_mask) and (flags & control_mask):
+                if keycode == 16:  # y
+                    manager.toggle_display = not manager.toggle_display
+                elif keycode == 4:  # h
+                    manager.continuous_mode = not manager.continuous_mode
+        return event
+
+    # 设置事件掩码为键盘事件
+    event_mask = (1 << Quartz.kCGEventKeyDown)
+    tap = Quartz.CGEventTapCreate(
+        Quartz.kCGSessionEventTap,
+        Quartz.kCGHeadInsertEventTap,
+        Quartz.kCGEventTapOptionDefault,
+        event_mask,
+        tap_callback,
+        None
+    )
+    if not tap:
+        print("无法创建全局键盘事件监听（需要辅助功能权限）")
+        return
+    run_loop_source = Quartz.CFMachPortCreateRunLoopSource(None, tap, 0)
+    loop = Quartz.CFRunLoopGetCurrent()
+    Quartz.CFRunLoopAddSource(loop, run_loop_source, Quartz.kCFRunLoopCommonModes)
+    Quartz.CGEventTapEnable(tap, True)
+    Quartz.CFRunLoopRun()
+
 def main():
     pool = NSAutoreleasePool.alloc().init()
     app = NSApplication.sharedApplication()
@@ -263,6 +314,13 @@ def main():
     if manager is None:
         print("Failed to initialize OverlayManager")
         sys.exit(1)
+
+    # 控制变量
+    manager.toggle_display = False
+    manager.continuous_mode = False
+
+    # 启动全局键盘监听线程
+    threading.Thread(target=global_key_listener, args=(manager,), daemon=True).start()
 
     threading.Thread(target=background_loop, args=(manager,), daemon=True).start()
 
