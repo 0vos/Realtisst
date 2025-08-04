@@ -87,7 +87,8 @@ class OverlayManager(NSObject):
         screen_width = int(screen.frame().size.width)
         screen_height = int(screen.frame().size.height)
 
-        font_size = 16
+        # 初始字体设置
+        font_size = 20
         char_width = font_size * 0.6
         padding = 20
 
@@ -115,35 +116,34 @@ class OverlayManager(NSObject):
                 lines.append(current_line)
             return lines
 
-        lines = split_text_by_width(text, max_width - padding, char_width)
-        num_lines = len(lines)
+        width = max_width
+        height = max_height
 
-        width = min(max(len(line) for line in lines) * char_width, max_width) + padding
-        height = num_lines * font_size * 1.5 + padding
+        min_font_size = 8
+        max_font_size = 40
+        font_size = max_font_size
+
+        def fits(text, width, height, font_size):
+            char_width = font_size * 0.6
+            line_height = font_size * 1.5
+            lines = split_text_by_width(text, width - padding, char_width)
+            total_height = len(lines) * line_height + padding
+            max_line_width = max((len(line) * char_width for line in lines), default=0) + padding
+            return total_height <= height and max_line_width <= width, lines
+
+        while font_size >= min_font_size:
+            ok, lines = fits(text, width, height, font_size)
+            if ok:
+                break
+            font_size -= 1
+
+        if font_size < min_font_size:
+            font_size = min_font_size
+            _, lines = fits(text, width, height, font_size)
 
         if test_mode:
             rect = NSMakeRect(0, 0, width, height)
             return width, height
-
-            # 正常显示窗口（完整保留你已有逻辑）
-        rect = NSMakeRect(x, y, width, height)
-        win = NSWindow.alloc().initWithContentRect_styleMask_backing_defer_(
-            rect,
-            NSBorderlessWindowMask,
-            NSBackingStoreBuffered,
-            False
-        )
-
-        # 如果超出最大范围，缩放字体直到适应
-        while (width > max_width or height > max_height) and font_size > 10:
-            font_size -= 1
-            char_width = font_size * 0.6
-            lines = split_text_by_width(text, max_width - padding, char_width)
-            if not lines:
-                lines = [" "]
-            num_lines = len(lines)
-            width = min(max(len(line) for line in lines) * char_width, max_width) + padding
-            height = num_lines * font_size * 1.5 + padding
 
         # 限制最终位置不超屏幕边界
         x = min(x, screen_width - width - 10)
