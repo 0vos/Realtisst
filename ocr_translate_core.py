@@ -31,6 +31,8 @@ def translate_batch(text_list):
 # 获取 OCR 文本 + 位置信息
 
 def get_text_blocks(img, screen_width=None, screen_height=None):
+    import numpy as np
+    from sklearn.cluster import DBSCAN
     image_width, image_height = img.size
 
     # macOS Quartz 截图为 Retina 2x 分辨率，坐标需缩放 0.5
@@ -53,46 +55,40 @@ def get_text_blocks(img, screen_width=None, screen_height=None):
                 'bottom': data['top'][i] + data['height'][i]
             })
 
-    # 按 top 排序，再按 left 排序
-    words.sort(key=lambda w: (w['top'], w['left']))
+    if not words:
+        return []
 
+    # Step 1: Y方向聚类（文本行）
+    avg_height = np.mean([w['height'] for w in words]) or 1.0
+    y_points = np.array([
+        [0, (w['top'] + w['height'] / 2) / avg_height]
+        for w in words
+    ])
+    line_clustering = DBSCAN(eps=1.0, min_samples=1).fit(y_points)
+    line_labels = line_clustering.labels_
+
+    from collections import defaultdict
+    lines_dict = defaultdict(list)
+    for word, label in zip(words, line_labels):
+        lines_dict[label].append(word)
+
+    # Step 2: 行内按 X 方向聚合段落
     paragraphs = []
-    current_para = []
-    threshold = 40
-
-    for word in words:
-        if not current_para:
-            current_para.append(word)
-            continue
-
-        last_word = current_para[-1]
-
-        vertical_gap = abs(word['top'] - last_word['bottom'])
-        horizontal_gap = abs(word['left'] - last_word['right'])
-
-        # 可以调整这两个阈值试试，经验值如下
-        max_vertical_gap = 40
-        max_horizontal_gap = 1024
-
-        if vertical_gap > max_vertical_gap or horizontal_gap > max_horizontal_gap:
+    for line in lines_dict.values():
+        line.sort(key=lambda w: w['left'])
+        current_para = [line[0]]
+        for i in range(1, len(line)):
+            prev = current_para[-1]
+            curr = line[i]
+            gap = curr['left'] - prev['right']
+            avg_width = np.mean([w['width'] for w in line]) or 1.0
+            if gap > avg_width * 1.5:
+                paragraphs.append(current_para)
+                current_para = [curr]
+            else:
+                current_para.append(curr)
+        if current_para:
             paragraphs.append(current_para)
-            current_para = [word]
-        else:
-            current_para.append(word)
-
-    if current_para:
-        paragraphs.append(current_para)
-
-    # Build a list of tuples with group and top coordinate
-    paragraph_with_top = []
-    for group in paragraphs:
-        if not group:
-            continue
-        top = min(w['top'] for w in group)
-        paragraph_with_top.append((top, group))
-
-    # Sort paragraphs by top coordinate
-    paragraph_with_top.sort(key=lambda x: x[0])
 
     results = []
     for group in paragraphs:
@@ -140,4 +136,3 @@ def get_text_blocks(img, screen_width=None, screen_height=None):
 #     return response.json()["translatedText"]
 #
 # print(translate_ocr("Press any key to continue"))
-
